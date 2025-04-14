@@ -5,7 +5,7 @@ A Python-based tool for automatically detecting and aligning faces in images usi
 ## Usage
 
 ```
-usage: main.py [-h] input_image
+usage: main.py [-h] [--size SIZE] input_image
 
 Align faces in images
 
@@ -14,6 +14,7 @@ positional arguments:
 
 options:
   -h, --help   show this help message and exit
+  --size SIZE  Output image size (default: 1024)
 ```
 
 ## Setup
