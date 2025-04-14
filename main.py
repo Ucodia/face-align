@@ -6,6 +6,7 @@ from face_align import FaceAlign
 def main():
     parser = argparse.ArgumentParser(description='Align faces in images')
     parser.add_argument('input_image', type=str, help='Path to input image file')
+    parser.add_argument('--size', type=int, default=1024, help='Output image size (default: 1024)')
     args = parser.parse_args()
 
     if not os.path.exists(args.input_image):
@@ -21,7 +22,7 @@ def main():
             print(f"Error: Could not read image '{args.input_image}'")
             return
 
-        face_aligner = FaceAlign()
+        face_aligner = FaceAlign(output_size=args.size)
         aligned_image = face_aligner.get_aligned_image(image)
 
         if aligned_image is None:

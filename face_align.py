@@ -6,6 +6,21 @@ import scipy.ndimage
 import PIL.Image
 import urllib.request
 import bz2
+from pathlib import Path
+import sys
+
+def get_predictor_path():
+    """Get the system-standard path for storing the predictor file."""
+    if os.name == 'posix':
+        if sys.platform == 'darwin':  # macOS
+            base_dir = Path.home() / 'Library' / 'Application Support' / 'face_align'
+        else:  # Linux
+            base_dir = Path.home() / '.local' / 'share' / 'face_align'
+    else:  # Windows
+        base_dir = Path(os.getenv('APPDATA')) / 'face_align'
+    
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return str(base_dir / 'shape_predictor_68_face_landmarks.dat')
 
 def download_predictor_if_needed(predictor_path):
     if not os.path.exists(predictor_path):
@@ -16,42 +31,17 @@ def download_predictor_if_needed(predictor_path):
         with bz2.BZ2File(bz2_path, 'rb') as source, open(predictor_path, 'wb') as target:
             target.write(source.read())
         os.remove(bz2_path)
-        print("Shape predictor downloaded and extracted successfully!")
-
-
-class LandmarksDetector:
-    def __init__(self, predictor_model_path):
-        """
-        :param predictor_model_path: path to shape_predictor_68_face_landmarks.dat file
-        """
-        self.detector = dlib.get_frontal_face_detector()
-        self.shape_predictor = dlib.shape_predictor(predictor_model_path)
-
-    def get_landmarks(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        dets = self.detector(gray, 1)
-
-        for detection in dets:
-            try:
-                face_landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, detection).parts()]
-                yield face_landmarks
-            except:
-                print("Exception in get_landmarks()!")
+        print(f"Shape predictor downloaded and extracted successfully to {predictor_path}")
 
 
 def align_image(image, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True):
-    lm = np.array(face_landmarks)
-    lm_chin          = lm[0  : 17]  # left-right
-    lm_eyebrow_left  = lm[17 : 22]  # left-right
-    lm_eyebrow_right = lm[22 : 27]  # left-right
-    lm_nose          = lm[27 : 31]  # top-down
-    lm_nostrils      = lm[31 : 36]  # top-down
-    lm_eye_left      = lm[36 : 42]  # left-clockwise
-    lm_eye_right     = lm[42 : 48]  # left-clockwise
-    lm_mouth_outer   = lm[48 : 60]  # left-clockwise
-    lm_mouth_inner   = lm[60 : 68]  # left-clockwise
+    img = PIL.Image.fromarray(image)
 
     # calculate vectors
+    lm = np.array(face_landmarks)
+    lm_eye_left      = lm[36 : 42]
+    lm_eye_right     = lm[42 : 48]
+    lm_mouth_outer   = lm[48 : 60]
     eye_left     = np.mean(lm_eye_left, axis=0)
     eye_right    = np.mean(lm_eye_right, axis=0)
     eye_avg      = (eye_left + eye_right) * 0.5
@@ -61,7 +51,7 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     mouth_avg    = (mouth_left + mouth_right) * 0.5
     eye_to_mouth = mouth_avg - eye_avg
 
-    # calculate crop angle
+    # rotate crop rectangle
     x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
     x /= np.hypot(*x)
     x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth) * 1.8)
@@ -69,8 +59,6 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     c0 = eye_avg + eye_to_mouth * 0.1
     quad = np.stack([c0 - x - y, c0 - x + y, c0 + x + y, c0 + x - y])
     qsize = np.hypot(*x) * 2
-
-    img = PIL.Image.fromarray(image)
 
     # shrink
     shrink = int(np.floor(qsize / output_size * 0.5))
@@ -112,18 +100,23 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
 
 
 class FaceAlign:
-    def __init__(self, predictor_model_path=None):
+    def __init__(self, predictor_model_path=None, output_size=1024):
         if predictor_model_path is None:
-            cur_dir = os.path.split(os.path.realpath(__file__))[0]
-            predictor_model_path = os.path.join(cur_dir, 'shape_predictor_68_face_landmarks.dat')
+            predictor_model_path = get_predictor_path()
         download_predictor_if_needed(predictor_model_path)
-        self.landmarks_detector = LandmarksDetector(predictor_model_path)
-
+        self.detector = dlib.get_frontal_face_detector()
+        self.shape_predictor = dlib.shape_predictor(predictor_model_path)
+        self.output_size = output_size
     def get_aligned_image(self, image):
         lms = []
-        for i, face_landmarks in enumerate(self.landmarks_detector.get_landmarks(image), start=1):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        dets = self.detector(gray, 1)
+
+        for detection in dets:
+            face_landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, detection).parts()]
             lms.append(face_landmarks)
+
         if len(lms) < 1:
             return None
-        out_image = align_image(image, lms[0])
+        out_image = align_image(image, lms[0], output_size=self.output_size)
         return out_image
