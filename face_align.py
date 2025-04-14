@@ -32,20 +32,15 @@ def download_predictor_model(predictor_path):
     print(f"Shape predictor downloaded and extracted successfully to {predictor_path}")
 
 def align_image(image, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True):
-    img = PIL.Image.fromarray(image)
+    img = PIL.Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if isinstance(image, np.ndarray) else image)
 
     # calculate vectors
     lm = np.array(face_landmarks)
-    lm_eye_left      = lm[36 : 42]
-    lm_eye_right     = lm[42 : 48]
-    lm_mouth_outer   = lm[48 : 60]
-    eye_left     = np.mean(lm_eye_left, axis=0)
-    eye_right    = np.mean(lm_eye_right, axis=0)
+    eye_left     = np.mean(lm[36 : 42], axis=0)
+    eye_right    = np.mean(lm[42 : 48], axis=0)
     eye_avg      = (eye_left + eye_right) * 0.5
     eye_to_eye   = eye_right - eye_left
-    mouth_left   = lm_mouth_outer[0]
-    mouth_right  = lm_mouth_outer[6]
-    mouth_avg    = (mouth_left + mouth_right) * 0.5
+    mouth_avg = (lm[48] + lm[54]) * 0.5
     eye_to_mouth = mouth_avg - eye_avg
 
     # rotate crop rectangle
@@ -85,7 +80,8 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
         blur = qsize * 0.02
         img += (scipy.ndimage.gaussian_filter(img, [blur, blur, 0]) - img) * np.clip(mask * 3.0 + 1.0, 0.0, 1.0)
         img += (np.median(img, axis=(0,1)) - img) * np.clip(mask, 0.0, 1.0)
-        img = np.uint8(np.clip(np.rint(PIL.Image.fromarray(img, 'RGB')), 0, 255))
+        img = np.uint8(np.clip(np.rint(img), 0, 255))
+        img = PIL.Image.fromarray(img, 'RGB')
         quad += pad[:2]
 
     # transform
@@ -93,7 +89,8 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     if output_size < transform_size:
         img = img.resize((output_size, output_size), PIL.Image.Resampling.LANCZOS)
 
-    return np.array(img)
+    # Convert back to numpy array in BGR format for OpenCV
+    return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 
 class FaceAlign:
