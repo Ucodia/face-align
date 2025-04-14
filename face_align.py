@@ -18,21 +18,18 @@ def get_predictor_path():
             base_dir = Path.home() / '.local' / 'share' / 'face_align'
     else:  # Windows
         base_dir = Path(os.getenv('APPDATA')) / 'face_align'
-    
     base_dir.mkdir(parents=True, exist_ok=True)
     return str(base_dir / 'shape_predictor_68_face_landmarks.dat')
 
-def download_predictor_if_needed(predictor_path):
-    if not os.path.exists(predictor_path):
-        print("Downloading shape predictor file...")
-        url = "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2"
-        bz2_path = predictor_path + ".bz2"
-        urllib.request.urlretrieve(url, bz2_path)
-        with bz2.BZ2File(bz2_path, 'rb') as source, open(predictor_path, 'wb') as target:
-            target.write(source.read())
-        os.remove(bz2_path)
-        print(f"Shape predictor downloaded and extracted successfully to {predictor_path}")
-
+def download_predictor_model(predictor_path):
+    print("Downloading shape predictor file...")
+    url = "http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2"
+    bz2_path = predictor_path + ".bz2"
+    urllib.request.urlretrieve(url, bz2_path)
+    with bz2.BZ2File(bz2_path, 'rb') as source, open(predictor_path, 'wb') as target:
+        target.write(source.read())
+    os.remove(bz2_path)
+    print(f"Shape predictor downloaded and extracted successfully to {predictor_path}")
 
 def align_image(image, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True):
     img = PIL.Image.fromarray(image)
@@ -100,10 +97,10 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
 
 
 class FaceAlign:
-    def __init__(self, predictor_model_path=None, output_size=1024):
-        if predictor_model_path is None:
-            predictor_model_path = get_predictor_path()
-        download_predictor_if_needed(predictor_model_path)
+    def __init__(self, output_size=1024):
+        predictor_model_path = get_predictor_path()
+        if not os.path.exists(predictor_model_path):
+            download_predictor_model(predictor_model_path)
         self.detector = dlib.get_frontal_face_detector()
         self.shape_predictor = dlib.shape_predictor(predictor_model_path)
         self.output_size = output_size
