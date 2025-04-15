@@ -5,12 +5,12 @@ A Python-based tool for automatically detecting and aligning faces in images usi
 ## Usage
 
 ```
-usage: main.py [-h] [--size SIZE] input_image
+usage: main.py [-h] [--size SIZE] input_paths [input_paths ...]
 
 Align faces in images
 
 positional arguments:
-  input_image  Path to input image file
+  input_paths  Paths to input image files and/or directories
 
 options:
   -h, --help   show this help message and exit
