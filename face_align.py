@@ -8,6 +8,7 @@ import urllib.request
 import bz2
 from pathlib import Path
 import sys
+import mediapipe as mp
 
 def get_predictor_path():
     """Get the system-standard path for storing the predictor file."""
@@ -36,11 +37,19 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
 
     # calculate vectors
     lm = np.array(face_landmarks)
-    eye_left     = np.mean(lm[36 : 42], axis=0)
-    eye_right    = np.mean(lm[42 : 48], axis=0)
-    eye_avg      = (eye_left + eye_right) * 0.5
-    eye_to_eye   = eye_right - eye_left
-    mouth_avg = (lm[48] + lm[54]) * 0.5
+    
+    # Use different landmark indices based on the detector type
+    if len(lm) == 468:  # MediaPipe landmarks
+        eye_left = np.mean(lm[[33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173]], axis=0)
+        eye_right = np.mean(lm[[263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398]], axis=0)
+        mouth_avg = (lm[61] + lm[291]) * 0.5
+    else:  # dlib landmarks
+        eye_left = np.mean(lm[36:42], axis=0)
+        eye_right = np.mean(lm[42:48], axis=0)
+        mouth_avg = (lm[48] + lm[54]) * 0.5
+
+    eye_avg = (eye_left + eye_right) * 0.5
+    eye_to_eye = eye_right - eye_left
     eye_to_mouth = mouth_avg - eye_avg
 
     # rotate crop rectangle
@@ -92,25 +101,69 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     # Convert back to numpy array in BGR format for OpenCV
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
-
 class FaceAlign:
-    def __init__(self, output_size=1024):
-        predictor_model_path = get_predictor_path()
-        if not os.path.exists(predictor_model_path):
-            download_predictor_model(predictor_model_path)
-        self.detector = dlib.get_frontal_face_detector()
-        self.shape_predictor = dlib.shape_predictor(predictor_model_path)
+    def __init__(self, output_size=1024, engine='mediapipe'):
+        """
+        Initialize the face alignment class.
+        
+        Args:
+            output_size (int): Size of the output aligned face image
+            engine (str): Type of face detection engine to use ('mediapipe' or 'dlib')
+        """
         self.output_size = output_size
+        self.engine = engine.lower()
+        
+        if self.engine == 'mediapipe':
+            self.mp_face_mesh = mp.solutions.face_mesh
+            self.face_mesh = self.mp_face_mesh.FaceMesh(
+                static_image_mode=True,
+                max_num_faces=1,
+                min_detection_confidence=0.5
+            )
+        elif self.engine == 'dlib':
+            predictor_model_path = get_predictor_path()
+            if not os.path.exists(predictor_model_path):
+                download_predictor_model(predictor_model_path)
+            self.detector = dlib.get_frontal_face_detector()
+            self.shape_predictor = dlib.shape_predictor(predictor_model_path)
+        else:
+            raise ValueError("engine must be either 'mediapipe' or 'dlib'")
+
     def get_aligned_image(self, image):
-        lms = []
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        dets = self.detector(gray, 1)
-
-        for detection in dets:
-            face_landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, detection).parts()]
-            lms.append(face_landmarks)
-
-        if len(lms) < 1:
-            return None
-        out_image = align_image(image, lms[0], output_size=self.output_size)
-        return out_image
+        """
+        Get an aligned face image using the specified engine.
+        
+        Args:
+            image: Input image (numpy array in BGR format)
+            
+        Returns:
+            Aligned face image or None if no face is detected
+        """
+        if self.engine == 'mediapipe':
+            # Convert the BGR image to RGB
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            
+            # Process the image and get face landmarks
+            results = self.face_mesh.process(rgb_image)
+            
+            if not results.multi_face_landmarks:
+                return None
+                
+            # Get the first face landmarks
+            face_landmarks = results.multi_face_landmarks[0].landmark
+            
+            # Convert landmarks to pixel coordinates
+            h, w = image.shape[:2]
+            landmarks = [(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks]
+            
+        else:  # dlib
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            dets = self.detector(gray, 1)
+            
+            if len(dets) < 1:
+                return None
+                
+            landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, dets[0]).parts()]
+        
+        # Align the image using the detected landmarks
+        return align_image(image, landmarks, output_size=self.output_size)
