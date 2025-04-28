@@ -12,3 +12,4 @@ dependencies:
   - scipy=1.15.2
   - pip:
     - mediapipe==0.10.21
+    - tqdm==4.67.1

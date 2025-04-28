@@ -127,7 +127,7 @@ class FaceAlign:
             self.detector = dlib.get_frontal_face_detector()
             self.shape_predictor = dlib.shape_predictor(predictor_model_path)
         else:
-            raise ValueError("engine must be either 'mediapipe' or 'dlib'")
+            raise ValueError(f"Unsupported engine: {self.engine}.")
 
     def get_aligned_image(self, image):
         """
@@ -156,7 +156,7 @@ class FaceAlign:
             h, w = image.shape[:2]
             landmarks = [(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks]
             
-        else:  # dlib
+        elif self.engine == 'dlib':
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             dets = self.detector(gray, 1)
             
@@ -164,6 +164,6 @@ class FaceAlign:
                 return None
                 
             landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, dets[0]).parts()]
-        
+
         # Align the image using the detected landmarks
         return align_image(image, landmarks, output_size=self.output_size)
