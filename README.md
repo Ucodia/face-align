@@ -23,7 +23,8 @@ pip install -r requirements.txt
 ## Usage
 
 ```
-usage: main.py [-h] [--size SIZE] [--engine {dlib,mediapipe}] input_path [output_path]
+usage: main.py [-h] [--size SIZE] [--engine {dlib,mediapipe}] [--debug]
+               input_path [output_path]
 
 Align faces in images
 
@@ -36,6 +37,7 @@ options:
   --size SIZE           Output image size (default: 1024)
   --engine {dlib,mediapipe}
                         Face detection engine to use (default: dlib)
+  --debug               Show facial landmarks in the output image
 ```
 
 ## Face Landmarks

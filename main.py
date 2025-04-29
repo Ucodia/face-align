@@ -4,14 +4,14 @@ from face_align import FaceAlign
 from pathlib import Path
 from tqdm import tqdm
 
-def process_image(input_path, output_path, output_size, engine='dlib'):
+def process_image(input_path, output_path, output_size, engine='dlib', debug=False):
     try:
         image = cv2.imread(input_path)
         if image is None:
             print(f"Error: Could not read image '{input_path}'")
             return False
 
-        face_aligner = FaceAlign(output_size=output_size, engine=engine)
+        face_aligner = FaceAlign(output_size=output_size, engine=engine, debug=debug)
         aligned_image = face_aligner.get_aligned_image(image)
 
         if aligned_image is None:
@@ -49,6 +49,8 @@ def main():
                       help='Output image size (default: 1024)')
     parser.add_argument('--engine', type=str, choices=['dlib', 'mediapipe'], default='dlib',
                       help='Face detection engine to use (default: dlib)')
+    parser.add_argument('--debug', action='store_true',
+                      help='Show facial landmarks in the output image')
     args = parser.parse_args()
 
     # Get all image paths
@@ -83,7 +85,7 @@ def main():
     
     # Process files with or without progress bar
     if is_file:
-        if process_image(str(input_path), str(output_path), args.size, args.engine):
+        if process_image(str(input_path), str(output_path), args.size, args.engine, args.debug):
             success_count += 1
             print(f"Aligned image saved to: {output_path}")
     else:
@@ -93,7 +95,7 @@ def main():
             out_path = str(Path(out_path).with_name(f"{Path(out_path).stem}_aligned{Path(out_path).suffix}"))
             Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-            if process_image(image_path, out_path, args.size, args.engine):
+            if process_image(image_path, out_path, args.size, args.engine, args.debug):
                 success_count += 1
 
     print(f"\nProcessing complete. Successfully processed {success_count} out of {len(image_paths)} images")

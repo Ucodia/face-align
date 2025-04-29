@@ -9,6 +9,14 @@ import bz2
 from pathlib import Path
 import sys
 import mediapipe as mp
+from PIL import ImageDraw
+
+MP_EYE_LEFT_IDX = [33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173]
+MP_EYE_RIGHT_IDX = [263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398]
+MP_MOUTH_IDX = [61, 291]
+DLIB_EYE_LEFT_IDX = list(range(36, 42))
+DLIB_EYE_RIGHT_IDX = list(range(42, 48))
+DLIB_MOUTH_IDX = [48, 54]
 
 def get_predictor_path():
     """Get the system-standard path for storing the predictor file."""
@@ -32,24 +40,39 @@ def download_predictor_model(predictor_path):
     os.remove(bz2_path)
     print(f"Shape predictor downloaded and extracted successfully to {predictor_path}")
 
-def align_image(image, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True):
+def align_image(image, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True, debug=False):
     img = PIL.Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if isinstance(image, np.ndarray) else image)
 
     # calculate vectors
     lm = np.array(face_landmarks)
-    
-    if len(lm) == 468:  # MediaPipe landmarks
-        eye_left = np.mean(lm[[33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173]], axis=0)
-        eye_right = np.mean(lm[[263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398]], axis=0)
-        mouth_avg = (lm[61] + lm[291]) * 0.5
-    else:  # dlib landmarks
-        eye_left = np.mean(lm[36:42], axis=0)
-        eye_right = np.mean(lm[42:48], axis=0)
-        mouth_avg = (lm[48] + lm[54]) * 0.5
 
-    eye_avg = (eye_left + eye_right) * 0.5
-    eye_to_eye = eye_right - eye_left
-    eye_to_mouth = mouth_avg - eye_avg
+    if (len(lm) == 468):
+        eye_left_idx = MP_EYE_LEFT_IDX
+        eye_right_idx = MP_EYE_RIGHT_IDX
+        mouth_idx = MP_MOUTH_IDX
+    elif (len(lm) == 68):
+        eye_left_idx = DLIB_EYE_LEFT_IDX
+        eye_right_idx = DLIB_EYE_RIGHT_IDX
+        mouth_idx = DLIB_MOUTH_IDX
+    else:
+        raise ValueError(f"Unsupported number of landmarks: {len(lm)}")
+    
+    eye_left_mean = np.mean(lm[eye_left_idx], axis=0)
+    eye_right_mean = np.mean(lm[eye_right_idx], axis=0)
+    mouth_mean = np.mean(lm[mouth_idx], axis=0)
+
+    eye_avg = (eye_left_mean + eye_right_mean) * 0.5
+    eye_to_eye = eye_right_mean - eye_left_mean
+    eye_to_mouth = mouth_mean - eye_avg
+
+    if debug:
+        # overlay debug information
+        draw = ImageDraw.Draw(img)
+        key_points = eye_left_idx + eye_right_idx + mouth_idx
+        radius = int(np.linalg.norm(eye_to_eye) * 0.02)
+        for idx in key_points:
+            x, y = lm[idx]
+            draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill=(0,255,0))
 
     # rotate crop rectangle
     x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
@@ -101,16 +124,18 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 class FaceAlign:
-    def __init__(self, output_size=1024, engine='mediapipe'):
+    def __init__(self, output_size=1024, engine='mediapipe', debug=False):
         """
         Initialize the face alignment class.
         
         Args:
             output_size (int): Size of the output aligned face image
             engine (str): Type of face detection engine to use ('mediapipe' or 'dlib')
+            debug (bool): Whether to show landmarks in the output image
         """
         self.output_size = output_size
         self.engine = engine.lower()
+        self.debug = debug
         
         if self.engine == 'mediapipe':
             self.mp_face_mesh = mp.solutions.face_mesh
@@ -165,4 +190,4 @@ class FaceAlign:
             landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, dets[0]).parts()]
 
         # Align the image using the detected landmarks
-        return align_image(image, landmarks, output_size=self.output_size)
+        return align_image(image, landmarks, output_size=self.output_size, debug=self.debug)
