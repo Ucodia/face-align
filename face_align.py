@@ -38,7 +38,6 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     # calculate vectors
     lm = np.array(face_landmarks)
     
-    # Use different landmark indices based on the detector type
     if len(lm) == 468:  # MediaPipe landmarks
         eye_left = np.mean(lm[[33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173]], axis=0)
         eye_right = np.mean(lm[[263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398]], axis=0)

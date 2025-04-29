@@ -1,5 +1,4 @@
 import argparse
-import os
 import cv2
 from face_align import FaceAlign
 from pathlib import Path

@@ -2,6 +2,24 @@
 
 A Python-based tool for automatically detecting and aligning faces in images using facial landmarks.
 
+## Setup
+
+This was tested on Python 3.12 only.
+
+macOS/Linux
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Windows
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
 ## Usage
 
 ```
@@ -18,13 +36,6 @@ options:
   --size SIZE           Output image size (default: 1024)
   --engine {dlib,mediapipe}
                         Face detection engine to use (default: dlib)
-```
-
-## Setup
-
-```bash
-conda env create -f environment.yml
-conda activate face-align
 ```
 
 ## Face Landmarks
