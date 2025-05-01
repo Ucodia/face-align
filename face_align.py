@@ -153,15 +153,15 @@ class FaceAlign:
         else:
             raise ValueError(f"Unsupported engine: {self.engine}.")
 
-    def get_aligned_image(self, image):
+    def get_face_landmarks(self, image):
         """
-        Get an aligned face image using the specified engine.
+        Get face landmarks using the specified engine.
         
         Args:
             image: Input image (numpy array in BGR format)
             
         Returns:
-            Aligned face image or None if no face is detected
+            Face landmarks or None if no face is detected
         """
         if self.engine == 'mediapipe':
             # Convert the BGR image to RGB
@@ -178,16 +178,32 @@ class FaceAlign:
             
             # Convert landmarks to pixel coordinates
             h, w = image.shape[:2]
-            landmarks = [(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks]
+            return [(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks]
             
         elif self.engine == 'dlib':
+            # Convert to grayscale for dlib
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # Detect faces
             dets = self.detector(gray, 1)
             
             if len(dets) < 1:
                 return None
                 
-            landmarks = [(item.x, item.y) for item in self.shape_predictor(gray, dets[0]).parts()]
+            # Get landmarks for the first detected face
+            shape = self.shape_predictor(gray, dets[0])
+            return [(item.x, item.y) for item in shape.parts()]
 
+    def get_aligned_image(self, image):
+        """
+        Get an aligned face image using the specified engine.
+        
+        Args:
+            image: Input image (numpy array in BGR format)
+            
+        Returns:
+            Aligned face image or None if no face is detected
+        """
+        landmarks = self.get_face_landmarks(image)
         # Align the image using the detected landmarks
         return align_image(image, landmarks, output_size=self.output_size, debug=self.debug)
