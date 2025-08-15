@@ -10,8 +10,7 @@ Recommended to use [uv](https://docs.astral.sh/uv/) for easy setup.
 ## Usage
 
 ```
-usage: main.py [-h] [--size SIZE] [--engine {dlib,mediapipe}] [--debug]
-               input_path [output_path]
+usage: face_align.py [-h] [--size SIZE] [--engine {dlib,mediapipe}] [--debug] input_path [output_path]
 
 Align faces in images
 
@@ -23,7 +22,7 @@ options:
   -h, --help            show this help message and exit
   --size SIZE           Output image size (default: 1024)
   --engine {dlib,mediapipe}
-                        Face detection engine to use (default: dlib)
+                        Face detection engine to use (default: mediapipe)
   --debug               Show facial landmarks in the output image
 ```
 

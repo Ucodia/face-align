@@ -1,0 +1,38 @@
+{
+  "configurations": [
+    {
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Launch Face Align",
+      "program": "${workspaceFolder}/face_align.py",
+      "args": [
+        "${input:inputPath}",
+        "${input:outputPath}",
+        "--engine",
+        "${input:engine}",
+      ],
+      "console": "integratedTerminal"
+    }
+  ],
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "inputPath",
+      "description": "Path to input image file or directory"
+    },
+    {
+      "type": "promptString",
+      "id": "outputPath",
+      "description": "Path to output image file or directory (optional)"
+    },
+    {
+      "type": "pickString",
+      "id": "engine",
+      "description": "Face detection engine to use",
+      "options": [
+        "dlib",
+        "mediapipe"
+      ]
+    }
+  ]
+}
