@@ -1,8 +1,0 @@
-dlib==19.24.8
-mediapipe==0.10.21
-numpy==1.26.4
-opencv-python==4.11.0.86
-pillow==11.0.0
-scipy==1.15.2
-setuptools==80.1.0
-tqdm==4.67.1
