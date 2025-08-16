@@ -10,7 +10,7 @@ Recommended to use [uv](https://docs.astral.sh/uv/) for easy setup.
 ## Usage
 
 ```
-usage: face_align.py [-h] [--size SIZE] [--engine {dlib,mediapipe}] [--debug] [--max-faces MAX_FACES] input_path [output_path]
+usage: face_align.py [-h] [--size SIZE] [--engine {dlib,mediapipe}] [--debug] [--refine] [--max-faces MAX_FACES] input_path [output_path]
 
 Align faces in images
 
@@ -24,6 +24,7 @@ options:
   --engine {dlib,mediapipe}
                         Face detection engine to use (default: mediapipe)
   --debug               Show facial landmarks in the output image
+  --refine              Enable refined landmarks in MediaPipe (provides 478 landmarks instead of 468)
   --max-faces MAX_FACES
                         Maximum number of faces to process per image (default: 3, use 1 for single face only)
 ```

@@ -126,7 +126,7 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 class FaceAlign:
-    def __init__(self, output_size=1024, engine='mediapipe', debug=False, max_faces=3):
+    def __init__(self, output_size=1024, engine='mediapipe', debug=False, max_faces=3, refine_landmarks=False):
         """
         Initialize the face alignment class.
         
@@ -135,18 +135,20 @@ class FaceAlign:
             engine (str): Type of face detection engine to use ('mediapipe' or 'dlib')
             debug (bool): Whether to show landmarks in the output image
             max_faces (int): Maximum number of faces to detect
+            refine_landmarks (bool): Whether to enable refined landmarks in MediaPipe
         """
         self.output_size = output_size
         self.engine = engine.lower()
         self.debug = debug
         self.max_faces = max_faces
+        self.refine_landmarks = refine_landmarks
         
         if self.engine == 'mediapipe':
             self.mp_face_mesh = mp.solutions.face_mesh
             self.face_mesh = self.mp_face_mesh.FaceMesh(
                 static_image_mode=True,
                 max_num_faces=max_faces,
-                refine_landmarks=True,
+                refine_landmarks=refine_landmarks,
                 min_detection_confidence=0.5
             )
         elif self.engine == 'dlib':
@@ -235,14 +237,14 @@ class FaceAlign:
         
         return aligned_images
 
-def process_image(input_path, output_path, output_size, engine='mediapipe', debug=False, max_faces=3):
+def process_image(input_path, output_path, output_size, engine='mediapipe', debug=False, max_faces=3, refine_landmarks=False):
     try:
         image = cv2.imread(input_path)
         if image is None:
             print(f"Error: Could not read image '{input_path}'")
             return False
 
-        face_aligner = FaceAlign(output_size=output_size, engine=engine, debug=debug, max_faces=max_faces)
+        face_aligner = FaceAlign(output_size=output_size, engine=engine, debug=debug, max_faces=max_faces, refine_landmarks=refine_landmarks)
         aligned_images = face_aligner.get_aligned_images(image, max_faces=max_faces)
         
         if not aligned_images:
@@ -299,6 +301,8 @@ def main():
                       help='Face detection engine to use (default: mediapipe)')
     parser.add_argument('--debug', action='store_true',
                       help='Show facial landmarks in the output image')
+    parser.add_argument('--refine', action='store_true',
+                      help='Enable refined landmarks in MediaPipe (provides 478 landmarks instead of 468)')
     parser.add_argument('--max-faces', type=int, default=3,
                       help='Maximum number of faces to process per image (default: 3, use 1 for single face only)')
     args = parser.parse_args()
@@ -336,7 +340,7 @@ def main():
     
     # Process files with or without progress bar
     if is_file:
-        if process_image(str(input_path), str(output_path), args.size, args.engine, args.debug, args.max_faces):
+        if process_image(str(input_path), str(output_path), args.size, args.engine, args.debug, args.max_faces, args.refine):
             success_count += 1
             print(f"Aligned image saved to: {output_path}")
     else:
@@ -346,7 +350,7 @@ def main():
             out_path = str(Path(out_path).with_name(f"{Path(out_path).stem}_aligned{Path(out_path).suffix}"))
             Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-            if process_image(image_path, out_path, args.size, args.engine, args.debug, args.max_faces):
+            if process_image(image_path, out_path, args.size, args.engine, args.debug, args.max_faces, args.refine):
                 success_count += 1
 
     print(f"\nProcessing complete. Successfully processed {success_count} out of {len(image_paths)} images")
