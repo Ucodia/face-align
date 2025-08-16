@@ -12,6 +12,8 @@ import mediapipe as mp
 from PIL import ImageDraw
 import argparse
 from tqdm import tqdm
+import multiprocessing as mp_process
+from functools import partial
 
 MP_EYE_LEFT_IDX = [33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173]
 MP_EYE_RIGHT_IDX = [263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398]
@@ -248,7 +250,6 @@ def process_image(input_path, output_path, output_size, engine='mediapipe', debu
         aligned_images = face_aligner.get_aligned_images(image, max_faces=max_faces)
         
         if not aligned_images:
-            print(f"Error: No face detected in image '{input_path}'")
             return False
         
         # Save each aligned face with appropriate naming
@@ -268,7 +269,6 @@ def process_image(input_path, output_path, output_size, engine='mediapipe', debu
             cv2.imwrite(face_output_path, aligned_image)
             success_count += 1
         
-        print(f"Processed {success_count} face(s) from '{input_path}'")
         return True
 
     except Exception as e:
@@ -305,6 +305,8 @@ def main():
                       help='Enable refined landmarks in MediaPipe (provides 478 landmarks instead of 468)')
     parser.add_argument('--max-faces', type=int, default=3,
                       help='Maximum number of faces to process per image (default: 3, use 1 for single face only)')
+    parser.add_argument('--workers', type=int, default=mp_process.cpu_count(),
+                      help=f'Number of parallel worker processes (default: {mp_process.cpu_count()})')
     args = parser.parse_args()
 
     # Get all image paths
@@ -338,22 +340,53 @@ def main():
     if not is_file:
         output_path.mkdir(parents=True, exist_ok=True)
     
+    # Set up multiprocessing
+    num_processes = args.workers
+    print(f"Using {num_processes} parallel processes")
+    
     # Process files with or without progress bar
     if is_file:
         if process_image(str(input_path), str(output_path), args.size, args.engine, args.debug, args.max_faces, args.refine):
             success_count += 1
             print(f"Aligned image saved to: {output_path}")
     else:
-        for image_path in tqdm(image_paths, desc="Processing images"):
+        # Prepare arguments for multiprocessing
+        process_args = []
+        for image_path in image_paths:
             rel_path = Path(image_path).relative_to(input_path)
             out_path = str(output_path / rel_path)
             out_path = str(Path(out_path).with_name(f"{Path(out_path).stem}_aligned{Path(out_path).suffix}"))
             Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-
-            if process_image(image_path, out_path, args.size, args.engine, args.debug, args.max_faces, args.refine):
-                success_count += 1
+            
+            process_args.append((image_path, out_path, args.size, args.engine, args.debug, args.max_faces, args.refine))
+        
+        # Use multiprocessing to process images in parallel
+        if num_processes == 1 or len(process_args) == 1:
+            # Single process or single image - use sequential processing with tqdm
+            for args_tuple in tqdm(process_args, desc="Processing images"):
+                input_path, output_path, output_size, engine, debug, max_faces, refine_landmarks = args_tuple
+                success = process_image(input_path, output_path, output_size, engine, debug, max_faces, refine_landmarks)
+                if success:
+                    success_count += 1
+        else:
+            # Multiple processes - use multiprocessing pool
+            with mp_process.Pool(processes=num_processes) as pool:
+                # Use starmap for unpacking arguments directly
+                results = list(tqdm(
+                    pool.starmap(process_image, process_args),
+                    total=len(process_args),
+                    desc="Processing images"
+                ))
+                success_count = sum(results)
 
     print(f"\nProcessing complete. Successfully processed {success_count} out of {len(image_paths)} images")
 
 if __name__ == '__main__':
+    # Set multiprocessing start method for compatibility
+    if hasattr(mp_process, 'set_start_method'):
+        try:
+            mp_process.set_start_method('spawn', force=True)
+        except RuntimeError:
+            pass  # Start method already set
+    
     main()
