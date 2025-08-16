@@ -48,7 +48,7 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     # calculate vectors
     lm = np.array(face_landmarks)
 
-    if (len(lm) == 468):
+    if (len(lm) == 468 or len(lm) == 478):  # +10 landmarks when enabling refine_landmarks option
         eye_left_idx = MP_EYE_LEFT_IDX
         eye_right_idx = MP_EYE_RIGHT_IDX
         mouth_idx = MP_MOUTH_IDX
@@ -126,7 +126,7 @@ def align_image(image, face_landmarks, output_size=1024, transform_size=4096, en
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 class FaceAlign:
-    def __init__(self, output_size=1024, engine='mediapipe', debug=False):
+    def __init__(self, output_size=1024, engine='mediapipe', debug=False, max_faces=3):
         """
         Initialize the face alignment class.
         
@@ -134,16 +134,19 @@ class FaceAlign:
             output_size (int): Size of the output aligned face image
             engine (str): Type of face detection engine to use ('mediapipe' or 'dlib')
             debug (bool): Whether to show landmarks in the output image
+            max_faces (int): Maximum number of faces to detect
         """
         self.output_size = output_size
         self.engine = engine.lower()
         self.debug = debug
+        self.max_faces = max_faces
         
         if self.engine == 'mediapipe':
             self.mp_face_mesh = mp.solutions.face_mesh
             self.face_mesh = self.mp_face_mesh.FaceMesh(
                 static_image_mode=True,
-                max_num_faces=1,
+                max_num_faces=max_faces,
+                refine_landmarks=True,
                 min_detection_confidence=0.5
             )
         elif self.engine == 'dlib':
@@ -163,7 +166,7 @@ class FaceAlign:
             image: Input image (numpy array in BGR format)
             
         Returns:
-            Face landmarks or None if no face is detected
+            List of face landmarks (one per detected face), empty list if no faces are detected
         """
         if self.engine == 'mediapipe':
             # Convert the BGR image to RGB
@@ -173,14 +176,18 @@ class FaceAlign:
             results = self.face_mesh.process(rgb_image)
             
             if not results.multi_face_landmarks:
-                return None
+                return []
                 
-            # Get the first face landmarks
-            face_landmarks = results.multi_face_landmarks[0].landmark
-            
-            # Convert landmarks to pixel coordinates
+            # Get all face landmarks
+            all_face_landmarks = []
             h, w = image.shape[:2]
-            return [(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks]
+            
+            for face_landmarks in results.multi_face_landmarks:
+                # Convert landmarks to pixel coordinates
+                landmarks = [(int(lm.x * w), int(lm.y * h)) for lm in face_landmarks.landmark]
+                all_face_landmarks.append(landmarks)
+            
+            return all_face_landmarks
             
         elif self.engine == 'dlib':
             # Convert to grayscale for dlib
@@ -190,43 +197,76 @@ class FaceAlign:
             dets = self.detector(gray, 1)
             
             if len(dets) < 1:
-                return None
+                return []
                 
-            # Get landmarks for the first detected face
-            shape = self.shape_predictor(gray, dets[0])
-            return [(item.x, item.y) for item in shape.parts()]
+            # Get landmarks for all detected faces
+            all_face_landmarks = []
+            for det in dets:
+                shape = self.shape_predictor(gray, det)
+                landmarks = [(item.x, item.y) for item in shape.parts()]
+                all_face_landmarks.append(landmarks)
+            
+            return all_face_landmarks
 
-    def get_aligned_image(self, image):
+    def get_aligned_images(self, image, max_faces=None):
         """
-        Get an aligned face image using the specified engine.
+        Get aligned face images for detected faces using the specified engine.
         
         Args:
             image: Input image (numpy array in BGR format)
+            max_faces: Maximum number of faces to process (None for all faces)
             
         Returns:
-            Aligned face image or None if no face is detected
+            List of aligned face images, empty list if no faces are detected
         """
-        landmarks = self.get_face_landmarks(image)
-        if landmarks is None:
-            return None
-        # Align the image using the detected landmarks
-        return align_image(image, landmarks, output_size=self.output_size, debug=self.debug)
+        landmarks_list = self.get_face_landmarks(image)
+        if not landmarks_list:
+            return []
+        
+        # Limit the number of faces to process if specified
+        if max_faces is not None:
+            landmarks_list = landmarks_list[:max_faces]
+        
+        # Align the image for each detected face
+        aligned_images = []
+        for landmarks in landmarks_list:
+            aligned_image = align_image(image, landmarks, output_size=self.output_size, debug=self.debug)
+            aligned_images.append(aligned_image)
+        
+        return aligned_images
 
-def process_image(input_path, output_path, output_size, engine='mediapipe', debug=False):
+def process_image(input_path, output_path, output_size, engine='mediapipe', debug=False, max_faces=3):
     try:
         image = cv2.imread(input_path)
         if image is None:
             print(f"Error: Could not read image '{input_path}'")
             return False
 
-        face_aligner = FaceAlign(output_size=output_size, engine=engine, debug=debug)
-        aligned_image = face_aligner.get_aligned_image(image)
-
-        if aligned_image is None:
+        face_aligner = FaceAlign(output_size=output_size, engine=engine, debug=debug, max_faces=max_faces)
+        aligned_images = face_aligner.get_aligned_images(image, max_faces=max_faces)
+        
+        if not aligned_images:
             print(f"Error: No face detected in image '{input_path}'")
             return False
-
-        cv2.imwrite(output_path, aligned_image)
+        
+        # Save each aligned face with appropriate naming
+        output_path_obj = Path(output_path)
+        success_count = 0
+        
+        for i, aligned_image in enumerate(aligned_images):
+            if len(aligned_images) == 1:
+                # Single face, use original output path
+                face_output_path = str(output_path_obj)
+            else:
+                # Multiple faces, add face index suffix
+                face_output_path = str(output_path_obj.with_name(
+                    f"{output_path_obj.stem}_face{i+1:02d}{output_path_obj.suffix}"
+                ))
+            
+            cv2.imwrite(face_output_path, aligned_image)
+            success_count += 1
+        
+        print(f"Processed {success_count} face(s) from '{input_path}'")
         return True
 
     except Exception as e:
@@ -259,6 +299,8 @@ def main():
                       help='Face detection engine to use (default: mediapipe)')
     parser.add_argument('--debug', action='store_true',
                       help='Show facial landmarks in the output image')
+    parser.add_argument('--max-faces', type=int, default=3,
+                      help='Maximum number of faces to process per image (default: 3, use 1 for single face only)')
     args = parser.parse_args()
 
     # Get all image paths
@@ -270,6 +312,7 @@ def main():
 
     print(f"Found {len(image_paths)} images to process")
     print(f"Using {args.engine} engine for face detection")
+    print(f"Processing up to {args.max_faces} face(s) per image")
     success_count = 0
 
     # Determine if input is a file or directory
@@ -293,7 +336,7 @@ def main():
     
     # Process files with or without progress bar
     if is_file:
-        if process_image(str(input_path), str(output_path), args.size, args.engine, args.debug):
+        if process_image(str(input_path), str(output_path), args.size, args.engine, args.debug, args.max_faces):
             success_count += 1
             print(f"Aligned image saved to: {output_path}")
     else:
@@ -303,7 +346,7 @@ def main():
             out_path = str(Path(out_path).with_name(f"{Path(out_path).stem}_aligned{Path(out_path).suffix}"))
             Path(out_path).parent.mkdir(parents=True, exist_ok=True)
 
-            if process_image(image_path, out_path, args.size, args.engine, args.debug):
+            if process_image(image_path, out_path, args.size, args.engine, args.debug, args.max_faces):
                 success_count += 1
 
     print(f"\nProcessing complete. Successfully processed {success_count} out of {len(image_paths)} images")
